@@ -15,9 +15,10 @@ class Arena {
 		// Bad portability to other systems but I dont care
 		static const size_t PAGE_SIZE = 4096; 
 		char *arena_pointer;
-		size_t arena_size;
 		size_t offset;
+		size_t arena_size;
 		const size_t MAX_NUM_SLABS;
+		const size_t NUM_SLABS_PER_BLOCK;
 
 		// Each free list contains a linked list of freed blocks. This is bin specific.
 		struct Free_list {
@@ -44,31 +45,55 @@ class Arena {
 		};
 
 		
-		/* List of bins.
+		/* array of bin sizes.
 		 * the maximum size of an allocation is 512
 		 * 0 can be allocated but is the minimum size for memory allocation
 		 */
-#define NUM_OF_BINS 8
+#define NUM_BINS 8
 		
-		std::array<size_t, NUM_OF_BINS> bins_list { 0, 8, 16, 32, 64, 128, 256, 512 };
+		std::array<size_t, NUM_BINS> bins_list { 8, 16, 32, 64, 128, 256, 512, 1024 };
 
 		/*
 		 * Array of bin structs
 		 */
-		std::array<Bin, NUM_OF_BINS> bins;
+		std::array<Bin, NUM_BINS> bins;
+
+		/*
+		 * Array of block_counts corresponding to size in bins_list
+		 */
+		std::array<size_t, NUM_BINS> blocks_to_bins_list {};
+
+		/*
+		 * Calculate the number of blocks based on the bins_list array.
+		 * The entire calculation is this:
+		 * Total number of pages available in the arena is, for e.g.,: 1024 * 1024 / 4096 = 256
+		 * 256 / 8 = 32 (32 pages available for each size)
+		 * 32 * 4096 = total number of bytes
+		 * 131072 / 8, 16, 32.... = number of blocks allocated to each size
+		 */
+		std::array<size_t, NUM_BINS> blocks_per_size(const std::array<size_t, NUM_BINS> &bins_list_ref){
+			std::array<size_t, NUM_BINS> block_count;
+			for (size_t i = 0; i < NUM_BINS; i++){
+				block_count[i] = (((size / PAGE_SIZE) / NUM_BINS) * PAGE_SIZE ) / bins_list_ref[i];		
+			}
+			return block_count;
+		}
 
 	public:
-		// Use long long for the size to prevent integer overflows
+		/* Use long long for the size to prevent integer overflows */
 		explicit Arena(long long size = 1024 * 1024)
 			: arena_pointer(nullptr), offset(0),
 			arena_size( ( ( static_cast<size_t>(size) + PAGE_SIZE - 1 ) / PAGE_SIZE ) * PAGE_SIZE ),
-			MAX_NUM_SLABS(arena_size / PAGE_SIZE)
+			MAX_NUM_SLABS(arena_size / PAGE_SIZE),
+			NUM_SLABS_PER_BLOCK(256 / NUM_BINS),
+			blocks_to_bins_list(blocks_per_size(bins_list))
+
 		{
 			
-			if (size < 0){ throw std::invalid_argument("SHENANIGANS!!!"); } 
+			if (size <= 0){ throw std::invalid_argument("SHENANIGANS!!!"); } 
 			
-			// We can finally allocate the Arena
-			write(1, "About to mmap", 13);
+			/* We can finally allocate the Arena */
+			write(1, "About to mmap\n", 13);
 			arena_pointer = static_cast<char *>(mmap(nullptr, arena_size, PROT_READ | PROT_WRITE,
 									MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
 			std::cout << arena_pointer << std::endl;
@@ -76,7 +101,7 @@ class Arena {
 			if (arena_pointer == MAP_FAILED){ perror("mmap"); exit(EXIT_FAILURE); }
 
 			/* Initialize the Bins struct properly */
-			for (size_t i = 0; i < NUM_OF_BINS; i++){
+			for (size_t i = 0; i < NUM_BINS; i++){
 				bins[i].slab_list = nullptr;
 				bins[i].free_list = nullptr;
 			}
