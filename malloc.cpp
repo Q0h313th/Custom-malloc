@@ -63,30 +63,14 @@ class Arena {
 		 */
 		std::array<size_t, NUM_BINS> blocks_to_bins_list {};
 
-		/*
-		 * Calculate the number of blocks based on the bins_list array.
-		 * The entire calculation is this:
-		 * Total number of pages available in the arena is, for e.g.,: 1024 * 1024 / 4096 = 256
-		 * 256 / 8 = 32 (32 pages available for each size)
-		 * 32 * 4096 = total number of bytes
-		 * 131072 / 8, 16, 32.... = number of blocks allocated to each size
-		 */
-		std::array<size_t, NUM_BINS> blocks_per_size(const std::array<size_t, NUM_BINS> &bins_list_ref){
-			std::array<size_t, NUM_BINS> block_count;
-			for (size_t i = 0; i < NUM_BINS; i++){
-				block_count[i] = (((size / PAGE_SIZE) / NUM_BINS) * PAGE_SIZE ) / bins_list_ref[i];		
-			}
-			return block_count;
-		}
-
 	public:
 		/* Use long long for the size to prevent integer overflows */
 		explicit Arena(long long size = 1024 * 1024)
 			: arena_pointer(nullptr), offset(0),
 			arena_size( ( ( static_cast<size_t>(size) + PAGE_SIZE - 1 ) / PAGE_SIZE ) * PAGE_SIZE ),
 			MAX_NUM_SLABS(arena_size / PAGE_SIZE),
-			NUM_SLABS_PER_BLOCK(256 / NUM_BINS),
-			blocks_to_bins_list(blocks_per_size(bins_list))
+			NUM_SLABS_PER_BLOCK(256 / NUM_BINS)
+			//blocks_to_bins_list(blocks_per_size(bins_list))
 
 		{
 			
@@ -105,6 +89,19 @@ class Arena {
 				bins[i].slab_list = nullptr;
 				bins[i].free_list = nullptr;
 			}
+
+			/*
+			 * Calculate the number of blocks based on the bins_list array.
+			 * The entire calculation is this:
+			 * Total number of pages available in the arena is, for e.g.,: 1024 * 1024 / 4096 = 256
+			 * 256 / 8 = 32 (32 pages available for each size)
+			 * 32 * 4096 = total number of bytes
+			 * 131072 / 8, 16, 32.... = number of blocks allocated to each size
+			 */
+			for (size_t i = 0; i < NUM_BINS; i++){
+				blocks_to_bins_list[i] = ( ( ( size / PAGE_SIZE) / NUM_BINS ) * PAGE_SIZE ) / bins_list[i];
+			}
+
 		}
 
 		~Arena()
