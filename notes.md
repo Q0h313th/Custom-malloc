@@ -17,3 +17,8 @@
     - For any given arena size, i have the number of slabs required. but how am i going to split them?
     - for now, lets assume the size of the arena is 1024 * 1024. that gives us 256 slabs of 4096 bytes each. (isnt that a bit too much). that means for each block of a certain size, i can have (256/8) = 32 slabs
     - number of blocks for each size is ( 32 * 4096 / sizeof(mem) )
+
+## GDB:
+    - What do I really want to ask GDB?
+    - Have my structs been initialised properly?
+    - Are my calculations right?

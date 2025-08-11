@@ -9,4 +9,4 @@
     strace and gdb are your friends
 
 ### TODO
-     1. Confirm if initialisers work with gdb
+      1. Confirm if initialisers work with gdb (completed)
