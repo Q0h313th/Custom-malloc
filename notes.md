@@ -22,3 +22,30 @@
     - What do I really want to ask GDB?
     - Have my structs been initialised properly?
     - Are my calculations right?
+
+## Visual Representation of my malloc:
+    
+    Arena --->  Bin1 (8B) --------> ----> Slab 1 ----> Block 1 -----> Block 2 ----> ... ----> Block 0x4000
+                |                        |
+                |                        ----> Slab 2 ----> Block 1 -----> Block 2 ----> ... ----> Block 0x4000
+                |                            |
+                |                            ----> Slab 3 ----> Block 1 -----> Block 2 ----> ... ----> Block 0x4000
+                |                                .
+                |                                .
+                |                                .
+                |                                ----> Slab 32 ----> Block 1 -----> Block 2 ----> ... ----> Block 0x4000
+                |
+                ---->  Bin2 (16B) ----> Block 1 -----> Block 2 ----> ... ----> Block 0x2000
+                     |
+                     .
+                     .
+                     .
+                     |
+                     ----> Bin3 (32B) ----> Block 1 -----> Block 2 ----> ... ----> Block 0x1000
+                        |
+                        .
+                        .
+                        .
+                        |
+                        ----> Bin8 (1024B) ----> Block 1 -----> Block 2 ----> ... ----> Block 0x80
+
