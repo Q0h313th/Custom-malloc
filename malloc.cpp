@@ -19,6 +19,8 @@ class Arena {
 		size_t arena_size;
 		const size_t MAX_NUM_SLABS;
 		const size_t NUM_SLABS_PER_BLOCK;
+		size_t mem_size;
+		size_t chunk_size;
 
 		// Each free list contains a linked list of freed blocks. This is bin specific.
 		struct Free_list {
@@ -61,7 +63,24 @@ class Arena {
 		/*
 		 * Array of block_counts corresponding to size in bins_list
 		 */
-		std::array<size_t, NUM_BINS> blocks_to_bins_list {};
+		std::array<size_t, NUM_BINS> blocks_from_bins_list {0};
+
+		int find_bin_index(size_t chunk_size){
+			for (size_t i = 0; i < NUM_BINS; i++){
+				if (chunk_size <= bins_list[i]){ return static_cast<int>(i); }
+			}
+			return -1;
+		}
+
+		/*
+		 *
+		 *
+		 *
+		 *
+		 *
+		 *
+		 *
+		 */
 
 	public:
 		/* Use long long for the size to prevent integer overflows */
@@ -70,7 +89,6 @@ class Arena {
 			arena_size( ( ( static_cast<size_t>(size) + PAGE_SIZE - 1 ) / PAGE_SIZE ) * PAGE_SIZE ),
 			MAX_NUM_SLABS(arena_size / PAGE_SIZE),
 			NUM_SLABS_PER_BLOCK(256 / NUM_BINS)
-			//blocks_to_bins_list(blocks_per_size(bins_list))
 
 		{
 			
@@ -99,7 +117,7 @@ class Arena {
 			 * 131072 / 8, 16, 32.... = number of blocks allocated to each size
 			 */
 			for (size_t i = 0; i < NUM_BINS; i++){
-				blocks_to_bins_list[i] = ( ( ( size / PAGE_SIZE) / NUM_BINS ) * PAGE_SIZE ) / bins_list[i];
+				blocks_from_bins_list[i] = ( ( ( size / PAGE_SIZE) / NUM_BINS ) * PAGE_SIZE ) / bins_list[i];
 			}
 
 		}
@@ -109,11 +127,20 @@ class Arena {
 			if (arena_pointer){ munmap(arena_pointer, arena_size); }
 			
 		}
-		/* Round up "size" to the nearest multiple of PAGE_SIZE	
-		 * This is moved to the initialiser list because you cant declare variables outside a function or something
-		 * arena_size = ((static_cast<size_t>(size) + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
-		 * max_num_slabs = arena_size / PAGE_SIZE;
-		*/
+		
+		void* allocate(size_t mem_size){
+			if (mem_size == 0){ return nullptr; }
+			/* 
+			 * Calculate the size of the chunk from the size of the memory requested
+			 */
+			size_t chunk_size;
+			int chunk_index;
+
+			chunk_index = find_bin_index(chunk_size);
+			if (chunk_index < 0){ return nullptr; }
+			size_t chunk_index = static_cast<size_t>(chunk_index);
+
+		}
 };
 
 int main(){
