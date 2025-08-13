@@ -62,6 +62,39 @@ class Arena {
 		 * Array of block_counts corresponding to size in bins_list
 		 */
 		std::array<size_t, NUM_BINS> blocks_to_bins_list {};
+		std::array<size_t, NUM_BINS> blocks_from_bins_list {0};
+
+		int find_bin_index(size_t chunk_size){
+			for (size_t i = 0; i < NUM_BINS; i++){
+				if (chunk_size <= bins_list[i]){ return static_cast<int>(i); }
+			}
+			return -1;
+		}
+		Slab* create_new_slab(size_t index){
+			size_t data_size = bins_list[index];
+
+			void* slab_mem = arena_pointer + offset;
+			offset += PAGE_SIZE;
+
+			std::cout << "Created a slab object" << std::endl;
+
+			Slab* slab = static_cast<Slab*>(slab_mem);
+			slab->next = nullptr;
+			slab->mem = static_cast<Slab*>(slab_mem) + sizeof(slab);
+			slab->block_size = bins_list[index];
+			slab->block_count = blocks_from_bins_list[index];
+			slab->free_count = blocks_from_bins_list[index];
+		}
+
+		/*
+		 *
+		 *
+		 *
+		 *
+		 *
+		 *
+		 *
+		 */
 
 	public:
 		/* Use long long for the size to prevent integer overflows */
@@ -88,6 +121,8 @@ class Arena {
 			for (size_t i = 0; i < NUM_BINS; i++){
 				bins[i].slab_list = nullptr;
 				bins[i].free_list = nullptr;
+
+				create_new_slab[i];
 			}
 
 			/*
@@ -114,6 +149,29 @@ class Arena {
 		 * arena_size = ((static_cast<size_t>(size) + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
 		 * max_num_slabs = arena_size / PAGE_SIZE;
 		*/
+		
+		void* allocate(size_t mem_size){
+			size_t chunk_size;
+			int chunk_index;
+			if (mem_size == 0){ return nullptr; }
+			/* 
+			 * Calculate the size of the chunk from the size of the memory requested
+			 */
+			chunk_size = mem_size + sizeof(metadata);
+			chunk_index = find_bin_index(chunk_size);
+			if (chunk_index < 0){ return nullptr; }
+			size_t chunk_index = static_cast<size_t>(chunk_index);
+
+			// get free block, or create a new slab if it doesnt exist
+			free_block = bins[chunk_index].free_list;
+			if (!free_block){
+				create_new_slab(chunk_index);
+				free_block = bins[chunk_index].free_list;
+			}
+			
+			// make the free_block->next the new head of the linked list
+			bins[chunk_index].free_list = free_block->next;
+		}
 };
 
 int main(){
