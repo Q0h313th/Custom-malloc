@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <array>
+#include <string.h>
 
 /*
  * This is the design of a first-fit memory-allocator
@@ -44,6 +45,10 @@ class Arena {
 			Free_list *free_list;
 		};
 
+		struct Metadata {
+			size_t size;
+			size_t bin_index;
+		};
 		
 		/* array of bin sizes.
 		 * the maximum size of an allocation is 512
@@ -60,6 +65,7 @@ class Arena {
 
 		/*
 		 * Array of block_counts corresponding to size in bins_list
+		 * blocks_to_bins_list is initialised at runtime. - it gives us the number of blocks per bin
 		 */
 		std::array<size_t, NUM_BINS> blocks_to_bins_list {};
 		std::array<size_t, NUM_BINS> blocks_from_bins_list {0};
@@ -70,9 +76,15 @@ class Arena {
 			}
 			return -1;
 		}
+		/*
+		slab->next points to the next slab in the linked list
+		slab->mem points to the actual memory that is available for use (we dont explicitly need to define this, but I would
+		100% forget what math i did while calculating the memory)
+		slab->block_size points to what block size this slab is split up into
+		slab->block_count points to the number of blocks (remaining)
+		slab->free_count points to the number of free blocks
+		*/
 		Slab* create_new_slab(size_t index){
-			size_t data_size = bins_list[index];
-
 			void* slab_mem = arena_pointer + offset;
 			offset += PAGE_SIZE;
 
@@ -80,10 +92,25 @@ class Arena {
 
 			Slab* slab = static_cast<Slab*>(slab_mem);
 			slab->next = nullptr;
-			slab->mem = static_cast<Slab*>(slab_mem) + sizeof(slab);
+			slab->mem = reinterpret_cast<char*>(slab) + sizeof(Slab);
 			slab->block_size = bins_list[index];
 			slab->block_count = blocks_from_bins_list[index];
 			slab->free_count = blocks_from_bins_list[index];
+
+			// now we initialise a free list of all the blocks
+			Free_list* prev = nullptr;
+			for (size_t i = 0; i < slab->block_count; i++) {
+				Free_list* block = reinterpret_cast<Free_list*>(reinterpret_cast<char*>(slab->mem) + i * slab->block_size);
+				block->next = prev;
+				prev = block;
+			}
+			bins[index].free_list = prev;
+
+			// now that the free list is initialised, add the slab to the slab_list
+			slab->next = bins[index].slab_list;
+			bins[index].slab_list = slab;
+
+			return slab;
 		}
 
 		/*
@@ -103,7 +130,7 @@ class Arena {
 			arena_size( ( ( static_cast<size_t>(size) + PAGE_SIZE - 1 ) / PAGE_SIZE ) * PAGE_SIZE ),
 			MAX_NUM_SLABS(arena_size / PAGE_SIZE),
 			NUM_SLABS_PER_BLOCK(256 / NUM_BINS)
-			//blocks_to_bins_list(blocks_per_size(bins_list))
+			// blocks_to_bins_list(blocks_per_size(bins_list))
 
 		{
 			
@@ -122,7 +149,7 @@ class Arena {
 				bins[i].slab_list = nullptr;
 				bins[i].free_list = nullptr;
 
-				create_new_slab[i];
+				create_new_slab(i);
 			}
 
 			/*
@@ -150,20 +177,20 @@ class Arena {
 		 * max_num_slabs = arena_size / PAGE_SIZE;
 		*/
 		
-		void* allocate(size_t mem_size){
+		void* malloc(size_t mem_size){
 			size_t chunk_size;
 			int chunk_index;
 			if (mem_size == 0){ return nullptr; }
 			/* 
 			 * Calculate the size of the chunk from the size of the memory requested
 			 */
-			chunk_size = mem_size + sizeof(metadata);
+			chunk_size = mem_size + sizeof(Metadata);
 			chunk_index = find_bin_index(chunk_size);
 			if (chunk_index < 0){ return nullptr; }
-			size_t chunk_index = static_cast<size_t>(chunk_index);
+			chunk_index = static_cast<size_t>(chunk_index);
 
 			// get free block, or create a new slab if it doesnt exist
-			free_block = bins[chunk_index].free_list;
+			Free_list* free_block = bins[chunk_index].free_list;
 			if (!free_block){
 				create_new_slab(chunk_index);
 				free_block = bins[chunk_index].free_list;
@@ -171,6 +198,12 @@ class Arena {
 			
 			// make the free_block->next the new head of the linked list
 			bins[chunk_index].free_list = free_block->next;
+			Metadata* metadata = reinterpret_cast<Metadata*>(free_block);
+			metadata->size = mem_size;
+			metadata->bin_index = chunk_index;
+
+			// return a void pointer to the mem region after the metadata struct
+			return reinterpret_cast<void*>(metadata + 1);
 		}
 };
 
@@ -179,19 +212,24 @@ int main(){
 		Arena default_arena;
 		std::cout << "Default arena created" << std::endl;
 
-		Arena custom_arena(2 * 1024 * 1024);
-		std::cout << "Custom arena created" << std::endl ;
+		void *p1 = default_arena.malloc(32);
+		std::cout << "allocated 32 bytes at " << p1  << std::endl;
+		void *p2 = default_arena.malloc(64);
+		std::cout << "allocated 64 bytes at " << p2  << std::endl;
 
-		Arena bad_arena(-500);
-		std::cout << "Bad arena!" << std::endl;
+		if (p1 == p2){
+			std::cout << "Overlapping allocations" << std::endl;
+		}
+		std::cout << "all allocations are unique" << std::endl;
 
+		memset(p1, 'A', 32);
+        memset(p2, 'B', 64);
+
+		std::cout << "memset call is successsfull" << std::endl;
+		void *p4 = default_arena.malloc(64);
+		std::cout << "reuse arena also successfull" << std::endl;
 	}
-	catch (const std::invalid_argument &e){
-		std::cerr << "Invalid argument: " << e.what() << '\n';
-	}
-	catch (const std::exception &e){
-		std::cerr << "Exception: " << e.what() << '\n';
-	}
+	catch (const std::exception &e) { std::cerr << "Exception" << e.what() << std::endl; }
 
 	return 0;
 
