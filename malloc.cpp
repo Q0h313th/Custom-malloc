@@ -68,7 +68,8 @@ class Arena {
 		 * blocks_to_bins_list is initialised at runtime. - it gives us the number of blocks per bin
 		 */
 		std::array<size_t, NUM_BINS> blocks_to_bins_list {};
-		std::array<size_t, NUM_BINS> blocks_from_bins_list {0};
+		// i think we can discard this
+		// std::array<size_t, NUM_BINS> blocks_from_bins_list {0};
 
 		int find_bin_index(size_t chunk_size){
 			for (size_t i = 0; i < NUM_BINS; i++){
@@ -96,6 +97,10 @@ class Arena {
 			slab->block_size = bins_list[index];
 			slab->block_count = blocks_to_bins_list[index];
 			slab->free_count = blocks_to_bins_list[index];
+
+			std::cout << "Block size is " << slab->block_size << std::endl;
+			std::cout << "Block count is " << slab->block_count << std::endl;
+
 
 			// now we initialise a free list of all the blocks
 			Free_list* prev = nullptr;
@@ -148,8 +153,8 @@ class Arena {
 			for (size_t i = 0; i < NUM_BINS; i++){
 				bins[i].slab_list = nullptr;
 				bins[i].free_list = nullptr;
-
-				create_new_slab(i);
+				// since we're employing lazy slab creation, we dont need to create slabs until that size is specifically requested
+				// create_new_slab(i);
 			}
 
 			/*
@@ -198,12 +203,48 @@ class Arena {
 			
 			// make the free_block->next the new head of the linked list
 			bins[chunk_index].free_list = free_block->next;
+
+			// update the slab metadata
+			Slab* slab = bins[chunk_index].slab_list;
+			while (slab) {
+				char* slab_start = reinterpret_cast<char*>(slab->mem);
+				char* slab_end = slab_start + slab->block_count * slab->block_size;
+				if ((reinterpret_cast<char*>(free_block) >= slab_start && reinterpret_cast<char*>(free_block) < slab_end)) {
+					break;
+				}
+				slab = slab->next;
+			}
+			if (slab) { slab->free_count -= 1; }
+			std::cout << "The free count is: " << slab->free_count << std::endl;
+
 			Metadata* metadata = reinterpret_cast<Metadata*>(free_block);
 			metadata->size = mem_size;
 			metadata->bin_index = chunk_index;
 
 			// return a void pointer to the mem region after the metadata struct
 			return reinterpret_cast<void*>(metadata + 1);
+		}
+
+		// c++ implicitly casts a pointer to void*
+		void free(void *ptr) {
+			Metadata* chunk_ptr = reinterpret_cast<Metadata*>(ptr) - 1;	
+			size_t index = chunk_ptr->bin_index;
+			Free_list* block = reinterpret_cast<Free_list*>(chunk_ptr);
+			memset(ptr, 0, chunk_ptr->size);
+			block->next = bins[index].free_list;
+			bins[index].free_list = block;
+
+			Slab* slab = bins[index].slab_list;
+			while (slab) {
+				char* slab_start = reinterpret_cast<char*>(slab->mem);
+				char* slab_end = slab_start + slab->block_count * slab->block_size;
+				if ((reinterpret_cast<char*>(block) >= slab_start && reinterpret_cast<char*>(block) < slab_end)) {
+					break;
+				}
+				slab = slab->next;
+			}
+			if (slab) { slab->free_count += 1; }
+			std::cout << "Free count after free is " << slab->free_count << std::endl;
 		}
 };
 
@@ -227,12 +268,12 @@ int main(){
 
 		std::cout << "memset call is successsfull" << std::endl;
 		void *p4 = default_arena.malloc(64);
-		std::cout << "reuse arena also successfull" << std::endl;
+		std::cout << "reuse arena also successfull, allocated 64 bytes at " << p4 << std::endl;
+
+		default_arena.free(p4);
+		std::cout << "we've freed p4" << std::endl;
 	}
 	catch (const std::exception &e) { std::cerr << "Exception" << e.what() << std::endl; }
 
 	return 0;
-
 }
-
-
