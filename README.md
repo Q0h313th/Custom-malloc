@@ -1,12 +1,14 @@
 # Custom Malloc implementation
-     First fit malloc
+First fit malloc
 
 ### Features
-    1. As of now, Ive just allocated an arena
-    2. Set up metadata, initialisers for bins, slabs and freelists. 
- 
+1. malloc()
+2. free()
+
 ### Debugging Tips
-    strace and gdb are your friends
+strace and gdb are your friends
 
 ### TODO
-      1. Confirm if initialisers work with gdb (completed)
+1. Confirm if initialisers work with gdb (completed)
+2. Confirm if malloc works (completed)
+3. Confirm if free works (completed)
