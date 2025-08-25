@@ -94,8 +94,8 @@ class Arena {
 			slab->next = nullptr;
 			slab->mem = reinterpret_cast<char*>(slab) + sizeof(Slab);
 			slab->block_size = bins_list[index];
-			slab->block_count = blocks_from_bins_list[index];
-			slab->free_count = blocks_from_bins_list[index];
+			slab->block_count = blocks_to_bins_list[index];
+			slab->free_count = blocks_to_bins_list[index];
 
 			// now we initialise a free list of all the blocks
 			Free_list* prev = nullptr;
